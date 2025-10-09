@@ -1,26 +1,60 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Image, ImageBackground } from 'react-native';
+import { 
+  View, 
+  Text, 
+  TextInput, 
+  TouchableOpacity, 
+  StyleSheet, 
+  ImageBackground, 
+  KeyboardAvoidingView, 
+  Platform, 
+  ScrollView
+} from 'react-native';
 import { FontAwesome } from '@expo/vector-icons';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../src/config/firebaseConfig';
+import CustomAlert from '../components/CustomAlert';
 
 export default function Login({ navigation }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [showAlert, setShowAlert] = useState(false);
+  const [alertConfig, setAlertConfig] = useState({});
+
+  // ALERTS PERSONALIZADOS
+  const showCustomAlert = (title, message, type = 'error', onConfirmCallback = null) => {
+    setAlertConfig({
+      title,
+      message,
+      type,
+      onConfirm: onConfirmCallback
+    });
+    setShowAlert(true);
+  };
 
   const handleLogin = async () => {
     if (!email || !password) {
-      Alert.alert("Error", "Por favor ingrese ambos campos.");
+      showCustomAlert("Campos requeridos", "Por favor ingrese ambos campos para continuar.", "info");
       return;
     }
 
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      Alert.alert("Login exitoso", "Has iniciado sesión correctamente.");
-      navigation.reset({ index: 0, routes: [{ name: 'Home' }] }); 
+      
+      // CALLBACK DE NAVEGACIÓN
+      showCustomAlert(
+        "¡Inicio exitoso!", 
+        "Has iniciado sesión correctamente. Puedes dirigirte al Inicio", 
+        "success",
+        () => {
+          setShowAlert(false);
+          navigation.reset({ index: 0, routes: [{ name: 'Home' }] });
+        }
+      );
+      
     } catch (error) {
-      let errorMessage = "Hubo un problema al iniciar sesión.";
+      let errorMessage = "Usuario o contraseña no válidos.";
       switch (error.code) {
         case 'auth/invalid-email':
           errorMessage = "El formato del correo electrónico no es válido.";
@@ -34,80 +68,115 @@ export default function Login({ navigation }) {
         case 'auth/network-request-failed':
           errorMessage = "Error de conexión, por favor intenta más tarde.";
           break;
+        default:
+          errorMessage = "Credenciales inválidas. Intente nuevamente.";
       }
-      Alert.alert("Error", errorMessage);
+      showCustomAlert("Error de acceso", errorMessage, "error");
+    }
+  };
+
+  // CIERRE DEL ALERT
+  const handleAlertClose = () => {
+    setShowAlert(false);
+    
+    // Ejecutar callback si existe
+    if (alertConfig.onConfirm) {
+      alertConfig.onConfirm();
     }
   };
 
   return (
     <ImageBackground
-      source={require('../assets/fondo.jpeg')}
+      source={require('../assets/fondo2.png')}
       style={styles.background}
       resizeMode="cover"
     >
-      <View style={styles.container}>
-        
+      <KeyboardAvoidingView 
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+      >
         <View style={styles.card}>
-          <Text style={styles.title}>Iniciar sesión</Text>
+          <ScrollView 
+            style={styles.scrollView}
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            <Text style={styles.title}>Iniciar sesión</Text>
 
-          {/* BOX DE CORREO */}
-          <View style={styles.boxContainer}>
-            <Text style={styles.boxLabel}>Usuario</Text>
-            <View style={styles.boxInput}>
-              <FontAwesome name="envelope" size={20} color="#666" style={styles.icon} />
-              <TextInput
-                style={styles.boxTextInput}
-                placeholder="usuario@email.com"
-                placeholderTextColor="#999"
-                value={email}
-                onChangeText={setEmail}
-                keyboardType="email-address"
-                autoCapitalize="none"
-              />
+            {/* BOX DE CORREO */}
+            <View style={styles.boxContainer}>
+              <Text style={styles.boxLabel}>Usuario</Text>
+              <View style={styles.boxInput}>
+                <FontAwesome name="envelope" size={20} color="#FFAB32" style={styles.icon} />
+                <TextInput
+                  style={styles.boxTextInput}
+                  placeholder="usuario@email.com"
+                  placeholderTextColor="#999"
+                  value={email}
+                  onChangeText={setEmail}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                />
+              </View>
             </View>
-          </View>
 
-          {/* BOX DE CONTRASEÑA */}
-          <View style={styles.boxContainer}>
-            <Text style={styles.boxLabel}>Contraseña</Text>
-            <View style={styles.boxInput}>
-              <FontAwesome name="lock" size={20} color="#666" style={styles.icon} />
-              <TextInput
-                style={styles.boxTextInput}
-                placeholder="Contraseña"
-                placeholderTextColor="#999"
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry={!showPassword}
-              />
-              <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-                <FontAwesome name={showPassword ? "eye-slash" : "eye"} size={20} color="#666" />
+            {/* BOX DE CONTRASEÑA */}
+            <View style={styles.boxContainer}>
+              <Text style={styles.boxLabel}>Contraseña</Text>
+              <View style={styles.boxInput}>
+                <FontAwesome name="lock" size={20} color="#FFAB32" style={styles.icon} />
+                <TextInput
+                  style={styles.boxTextInput}
+                  placeholder="Contraseña"
+                  placeholderTextColor="#999"
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry={!showPassword}
+                />
+                <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+                  <FontAwesome name={showPassword ? "eye-slash" : "eye"} size={20} color="#FFAB32" />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* LINK OLVIDÉ CONTRASEÑA */}
+            <TouchableOpacity style={styles.forgotPassword}>
+              <Text style={styles.forgotPasswordText}>¿Olvidaste tu contraseña?</Text>
+            </TouchableOpacity>
+
+            {/* BOTÓN CON FONDO DE IMAGEN */}
+            <TouchableOpacity style={styles.imageButton} onPress={handleLogin}>
+              <ImageBackground
+                source={require('../assets/fondo.jpeg')}
+                style={styles.buttonBackground}
+                resizeMode="cover"
+              >
+                <Text style={styles.imageButtonText}>Ingresar</Text>
+              </ImageBackground>
+            </TouchableOpacity>
+
+            {/* REGISTRO */}
+            <View style={styles.registerContainer}>
+              <Text style={styles.registerText}>¿No estas registrado? </Text>
+              <TouchableOpacity onPress={() => navigation.navigate('SignUp')}>
+                <Text style={styles.registerLink}>Crear cuenta</Text>
               </TouchableOpacity>
             </View>
-          </View>
-
-          {/* LINK OLVIDÉ CONTRASEÑA */}
-          <TouchableOpacity style={styles.forgotPassword}>
-            <Text style={styles.forgotPasswordText}>¿Olvidaste tu contraseña?</Text>
-          </TouchableOpacity>
-
-          {/* BOTÓN CON FONDO DE IMAGEN */}
-          <TouchableOpacity style={styles.imageButton} onPress={handleLogin}>
-            <ImageBackground
-              source={require('../assets/fondo.jpeg')}
-              style={styles.buttonBackground}
-              resizeMode="cover"
-            >
-              <Text style={styles.imageButtonText}>Ingresar</Text>
-            </ImageBackground>
-          </TouchableOpacity>
-
-          {/* REGISTRO */}
-          <TouchableOpacity onPress={() => navigation.navigate('SignUp')}>
-            <Text style={styles.registerText}>¿No estas registrado? Crear cuenta</Text>
-          </TouchableOpacity>
+          </ScrollView>
         </View>
-      </View>
+      </KeyboardAvoidingView>
+
+      {/* ALERT PERSONALIZADO CON MODAL */}
+      <CustomAlert
+        visible={showAlert}
+        title={alertConfig.title}
+        message={alertConfig.message}
+        type={alertConfig.type}
+        onConfirm={handleAlertClose}
+        confirmText="Aceptar"
+      />
     </ImageBackground>
   );
 }
@@ -123,24 +192,39 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     alignItems: 'center',
   },
-  logo: {
-    width: 100,
-    height: 100,
-    marginBottom: 20,
-    position: 'absolute',
-    top: 50,
+  registerContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 10,
   },
+  registerText: {
+    color: '#087182',
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  registerLink: {
+    color: '#087182',
+    fontSize: 16,
+    fontWeight: '500',
+    textDecorationLine: 'underline',
+    textDecorationColor: '#087182',
+    textDecorationStyle: 'solid',
+  },  
   card: {
     backgroundColor: 'white',
     width: '100%',
-    height: '70%',
-    padding: 30,
+    height: '65%',
     borderTopLeftRadius: 30,
     borderTopRightRadius: 30,
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
+    overflow: 'hidden',
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    padding: 30,
+    paddingBottom: 40,
   },
   title: {
     fontSize: 28,
@@ -157,7 +241,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     marginBottom: 8,
-    color: '#333',
+    color: '#2B2B2B',
   },
   boxInput: {
     flexDirection: 'row',
@@ -171,7 +255,7 @@ const styles = StyleSheet.create({
   },
   boxTextInput: {
     flex: 1,
-    height: 40,
+    height: 35,
     fontSize: 16,
     color: '#333',
   },
@@ -184,16 +268,18 @@ const styles = StyleSheet.create({
     marginBottom: 25,
   },
   forgotPasswordText: {
-    color: '#087182',
+    color: '#16a0b6ff',
     fontSize: 14,
     fontWeight: '500',
   },
   // BOTÓN CON FONDO DE IMAGEN
   imageButton: {
+    width: 200,
     height: 50,
     borderRadius: 10,
     overflow: 'hidden',
     marginBottom: 20,
+    alignSelf: 'center',
   },
   buttonBackground: {
     flex: 1,
@@ -207,12 +293,5 @@ const styles = StyleSheet.create({
     textShadowColor: 'rgba(0, 0, 0, 0.5)',
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 3,
-  },
-  // TEXTO DE REGISTRO
-  registerText: {
-    textAlign: 'center',
-    color: '#087182',
-    fontSize: 16,
-    fontWeight: '500',
   },
 });
