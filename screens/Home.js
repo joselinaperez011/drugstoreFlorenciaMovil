@@ -14,14 +14,75 @@ import {
 import { signOut } from 'firebase/auth';
 import { auth } from '../src/config/firebaseConfig';
 import { FontAwesome, MaterialIcons } from '@expo/vector-icons';
+// Importar Firestore
+import { db } from '../src/config/firebaseConfig';
+import { doc, getDoc } from 'firebase/firestore';
 
 const { width } = Dimensions.get('window');
 
 export default function Home({ navigation }) {
   const [menuVisible, setMenuVisible] = useState(false);
   const [profileModalVisible, setProfileModalVisible] = useState(false);
+  const [userData, setUserData] = useState(null);
+  const [firestoreData, setFirestoreData] = useState(null);
 
-  // Botón 
+  // Obtener datos del usuario al cargar
+  useEffect(() => {
+    const fetchUserData = async () => {
+      const user = auth.currentUser;
+      if (user) {
+        // Extraer nombre y apellido del displayName
+        let name = "Usuario";
+        let lastName = "";
+        
+        if (user.displayName) {
+          const nameParts = user.displayName.split(' ');
+          name = nameParts[0] || "Usuario";
+          lastName = nameParts.slice(1).join(' ') || "";
+        } else if (user.email) {
+          name = user.email.split('@')[0];
+        }
+        
+        setUserData({
+          name: name,
+          lastName: lastName,
+          email: user.email || ""
+        });
+
+        // CARGAR DATOS DESDE FIRESTORE
+        await loadUserDataFromFirestore();
+      }
+    };
+
+    fetchUserData();
+  }, []);
+
+  // Recargar datos cuando el modal de perfil se abre
+  useEffect(() => {
+    if (profileModalVisible) {
+      loadUserDataFromFirestore();
+    }
+  }, [profileModalVisible]);
+
+  // Función para cargar datos desde Firestore
+  const loadUserDataFromFirestore = async () => {
+    try {
+      const userRef = doc(db, 'users', 'prueba');
+      const userSnap = await getDoc(userRef);
+      
+      if (userSnap.exists()) {
+        const firestoreUserData = userSnap.data();
+        setFirestoreData(firestoreUserData);
+        console.log('📸 Datos cargados desde Firestore en Home:', firestoreUserData);
+      } else {
+        console.log('No se encontraron datos en Firestore');
+      }
+    } catch (error) {
+      console.error('Error cargando datos de Firestore:', error);
+    }
+  };
+
+  // Botón de retroceso
   useEffect(() => {
     const backHandler = BackHandler.addEventListener(
       'hardwareBackPress',
@@ -48,6 +109,60 @@ export default function Home({ navigation }) {
     } catch (error) {
       console.log("Error al cerrar sesión:", error);
     }
+  };
+
+  const handleViewProfile = () => {
+    setProfileModalVisible(false);
+    // Pasar tanto los datos de auth como los de firestore
+    navigation.navigate('ViewProfile', { 
+      userData: userData,
+      firestoreData: firestoreData
+    });
+  };
+
+  // Función para obtener el nombre completo desde Firestore
+  const getFullName = () => {
+    if (firestoreData && firestoreData.nombre && firestoreData.apellido) {
+      return `${firestoreData.nombre} ${firestoreData.apellido}`;
+    }
+    if (userData) {
+      return `${userData.name} ${userData.lastName}`;
+    }
+    return "Usuario";
+  };
+
+  // NUEVO: Función para renderizar la foto de perfil o iniciales
+  const renderProfileImage = () => {
+    if (firestoreData && firestoreData.foto_perfil) {
+      return (
+        <Image 
+          source={{ uri: firestoreData.foto_perfil }} 
+          style={styles.profileImage}
+          onError={(error) => {
+            console.log('❌ Error cargando imagen en modal:', error);
+          }}
+        />
+      );
+    } else {
+      return (
+        <View style={styles.avatarContainer}>
+          <Text style={styles.avatarText}>
+            {getAvatarInitials()}
+          </Text>
+        </View>
+      );
+    }
+  };
+
+  // Función para obtener las iniciales del avatar
+  const getAvatarInitials = () => {
+    if (firestoreData && firestoreData.nombre && firestoreData.apellido) {
+      return `${firestoreData.nombre.charAt(0)}${firestoreData.apellido.charAt(0)}`;
+    }
+    if (userData) {
+      return `${userData.name.charAt(0)}${userData.lastName.charAt(0)}`;
+    }
+    return "U";
   };
 
   const MenuItem = ({ icon, title, onPress }) => (
@@ -252,7 +367,7 @@ export default function Home({ navigation }) {
           </TouchableOpacity>
         </Modal>
 
-        {/* Modal de Perfil */}
+        {/* Modal de Perfil ACTUALIZADO CON FOTO */}
         <Modal
           animationType="fade"
           transparent={true}
@@ -265,16 +380,46 @@ export default function Home({ navigation }) {
             onPress={() => setProfileModalVisible(false)}
           >
             <View style={styles.profileModal}>
-              <View style={styles.profileHeader}>
-                <MaterialIcons name="person" size={48} color="#035c70" />
-                <Text style={styles.profileName}>Andrea Gonzales</Text>
-                <Text style={styles.profileRole}>Administradora</Text>
-              </View>
+              {/* Información del usuario - ACTUALIZADO CON FOTO */}
+              {(userData || firestoreData) && (
+                <View style={styles.profileInfo}>
+                  {renderProfileImage()}
+                  <Text style={styles.profileName}>
+                    {getFullName()}
+                  </Text>
+                  <Text style={styles.profileEmail}>
+                    {userData?.email || firestoreData?.email || ""}
+                  </Text>
+                  {firestoreData && firestoreData.foto_perfil && (
+                    <Text style={styles.profileUpdated}>
+                      ✓ Foto de perfil
+                    </Text>
+                  )}
+                  {firestoreData && !firestoreData.foto_perfil && (
+                    <Text style={styles.profileUpdated}>
+                      ✓ Perfil actualizado
+                    </Text>
+                  )}
+                </View>
+              )}
+              
+              {/* Opciones del perfil - ACTUALIZADO */}
               <TouchableOpacity 
-                style={styles.profileCloseButton}
-                onPress={() => setProfileModalVisible(false)}
+                style={styles.profileOption}
+                onPress={handleViewProfile}
               >
-                <Text style={styles.profileCloseText}>Cerrar</Text>
+                <MaterialIcons name="visibility" size={20} color="#035c70" />
+                <Text style={styles.profileOptionText}>Ver perfil</Text>
+              </TouchableOpacity>
+              
+              <View style={styles.divider} />
+              
+              <TouchableOpacity 
+                style={styles.profileOption}
+                onPress={handleLogOut}
+              >
+                <MaterialIcons name="logout" size={20} color="#E74C3C" />
+                <Text style={[styles.profileOptionText, styles.logoutText]}>Cerrar sesión</Text>
               </TouchableOpacity>
             </View>
           </TouchableOpacity>
@@ -524,49 +669,91 @@ const styles = StyleSheet.create({
     marginLeft: 15,
     fontWeight: '600',
   },
-  // Estilos del modal de perfil
+  // Estilos del modal de perfil ACTUALIZADO CON FOTO
   profileOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: 'flex-start',
+    alignItems: 'flex-end',
+    paddingTop: 60,
+    paddingRight: 20,
   },
   profileModal: {
     backgroundColor: 'white',
-    borderRadius: 20,
-    padding: 30,
-    alignItems: 'center',
-    width: width * 0.8,
+    borderRadius: 12,
+    padding: 15,
+    width: 200,
     elevation: 5,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
   },
-  profileHeader: {
+  profileInfo: {
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 15,
+    paddingBottom: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#ECF0F1',
+  },
+  // NUEVO: Estilo para la imagen de perfil en el modal
+  profileImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    marginBottom: 10,
+  },
+  avatarContainer: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#035c70',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  avatarText: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: 'bold',
   },
   profileName: {
-    fontSize: 22,
+    fontSize: 16,
     fontWeight: 'bold',
     color: '#035c70',
-    marginTop: 10,
-  },
-  profileRole: {
-    fontSize: 16,
-    color: '#7F8C8D',
     marginTop: 5,
+    textAlign: 'center',
   },
-  profileCloseButton: {
-    backgroundColor: '#035c70',
-    paddingHorizontal: 30,
-    paddingVertical: 10,
-    borderRadius: 25,
+  profileEmail: {
+    fontSize: 12,
+    color: '#7F8C8D',
+    marginTop: 4,
+    textAlign: 'center',
   },
-  profileCloseText: {
-    color: 'white',
-    fontSize: 16,
+  profileUpdated: {
+    fontSize: 10,
+    color: '#12B05B',
+    marginTop: 4,
     fontWeight: '600',
+  },
+  profileOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+  },
+  profileOptionText: {
+    fontSize: 16,
+    color: '#2C3E50',
+    marginLeft: 10,
+    fontWeight: '500',
+  },
+  logoutText: {
+    color: '#E74C3C',
+  },
+  divider: {
+    height: 1,
+    backgroundColor: '#ECF0F1',
+    marginVertical: 5,
   },
 });

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ImageBackground, KeyboardAvoidingView, Platform, ScrollView} from 'react-native';
 import { FontAwesome } from '@expo/vector-icons';
 import { auth } from '../src/config/firebaseConfig';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import CustomAlert from '../components/CustomAlert';
 
 export default function SignUp({ navigation }) {
@@ -13,6 +13,7 @@ export default function SignUp({ navigation }) {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const [errors, setErrors] = useState({});
   const [showAlert, setShowAlert] = useState(false);
@@ -133,8 +134,18 @@ export default function SignUp({ navigation }) {
     // Si no están todos vacíos, hacer la validación normal
     if (!validateFields()) return;
 
+    setLoading(true);
+
     try {
-      await createUserWithEmailAndPassword(auth, email, password);
+      // Crear usuario en Firebase Auth
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+
+      // Actualizar el displayName en Auth con nombre completo
+      await updateProfile(user, {
+        displayName: `${firstName} ${lastName}`
+      });
+
       showCustomAlert("¡Registro exitoso!", "Usuario registrado con éxito. Ahora puedes iniciar sesión.", "success");
       
     } catch (error) {
@@ -152,8 +163,12 @@ export default function SignUp({ navigation }) {
         case 'auth/network-request-failed':
           errorMessage = "Error de conexión, por favor intenta más tarde.";
           break;
+        default:
+          errorMessage = `Error: ${error.message}`;
       }
       showCustomAlert("Error de registro", errorMessage, "error");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -204,6 +219,7 @@ export default function SignUp({ navigation }) {
                   placeholderTextColor="#999"
                   value={firstName}
                   onChangeText={(text) => validateName(text, 'firstName')}
+                  editable={!loading}
                 />
               </View>
               {errors.firstName ? (
@@ -221,6 +237,7 @@ export default function SignUp({ navigation }) {
                   placeholderTextColor="#999"
                   value={lastName}
                   onChangeText={(text) => validateName(text, 'lastName')}
+                  editable={!loading}
                 />
               </View>
               {errors.lastName ? (
@@ -240,6 +257,7 @@ export default function SignUp({ navigation }) {
                   onChangeText={validateEmailRealTime}
                   keyboardType="email-address"
                   autoCapitalize="none"
+                  editable={!loading}
                 />
               </View>
               {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
@@ -256,8 +274,9 @@ export default function SignUp({ navigation }) {
                   value={password}
                   onChangeText={validatePasswordRealTime}
                   secureTextEntry={!showPassword}
+                  editable={!loading}
                 />
-                <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+                <TouchableOpacity onPress={() => setShowPassword(!showPassword)} disabled={loading}>
                   <FontAwesome name={showPassword ? "eye-slash" : "eye"} size={20} color="#FFAB32" />
                 </TouchableOpacity>
               </View>
@@ -295,8 +314,9 @@ export default function SignUp({ navigation }) {
                   value={confirmPassword}
                   onChangeText={validateConfirmPasswordRealTime}
                   secureTextEntry={!showConfirmPassword}
+                  editable={!loading}
                 />
-                <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
+                <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)} disabled={loading}>
                   <FontAwesome name={showConfirmPassword ? "eye-slash" : "eye"} size={20} color="#FFAB32" />
                 </TouchableOpacity>
               </View>
@@ -308,17 +328,23 @@ export default function SignUp({ navigation }) {
               )}
             </View>
 
-            <TouchableOpacity style={styles.imageButton} onPress={handleSignUp}>
+            <TouchableOpacity 
+              style={[styles.imageButton, loading && styles.disabledButton]} 
+              onPress={handleSignUp}
+              disabled={loading}
+            >
               <ImageBackground
                 source={require('../assets/fondo.jpeg')}
                 style={styles.buttonBackground}
                 resizeMode="cover"
               >
-                <Text style={styles.imageButtonText}>Crear cuenta</Text>
+                <Text style={styles.imageButtonText}>
+                  {loading ? 'Creando cuenta...' : 'Crear cuenta'}
+                </Text>
               </ImageBackground>
             </TouchableOpacity>
 
-            <TouchableOpacity onPress={() => navigation.navigate('Login')}>
+            <TouchableOpacity onPress={() => navigation.navigate('Login')} disabled={loading}>
               <Text style={styles.loginText}>¿Ya tenés una cuenta? Inicia Sesión</Text>
             </TouchableOpacity>
           </View>
@@ -375,10 +401,44 @@ const styles = StyleSheet.create({
   validationRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 3 },
   validationText: { fontSize: 12, color: '#666', flex: 1 },
   validationSuccess: { color: '#4CAF50', fontWeight: '500' },
-  imageButton: { height: 50, borderRadius: 10, overflow: 'hidden', marginBottom: 20,  width: 200, alignSelf: 'center' },
-  buttonBackground: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  imageButtonText: { color: 'white', fontSize: 18, fontWeight: 'bold' },
-  loginText: { textAlign: 'center', color: '#087182', fontSize: 16, fontWeight: '500' },
-  errorText: { color: 'red', fontSize: 12, marginTop: 3, marginLeft: 5 },
-  successText: { color: '#4CAF50', fontSize: 12, marginTop: 3, marginLeft: 5, fontWeight: '500' },
+  imageButton: { 
+    height: 50, 
+    borderRadius: 10, 
+    overflow: 'hidden', 
+    marginBottom: 20,  
+    width: 200, 
+    alignSelf: 'center' 
+  },
+  disabledButton: {
+    opacity: 0.6,
+  },
+  buttonBackground: { 
+    flex: 1, 
+    justifyContent: 'center', 
+    alignItems: 'center' 
+  },
+  imageButtonText: { 
+    color: 'white', 
+    fontSize: 18, 
+    fontWeight: 'bold' 
+  },
+  loginText: { 
+    textAlign: 'center', 
+    color: '#087182', 
+    fontSize: 16, 
+    fontWeight: '500' 
+  },
+  errorText: { 
+    color: 'red', 
+    fontSize: 12, 
+    marginTop: 3, 
+    marginLeft: 5 
+  },
+  successText: { 
+    color: '#4CAF50', 
+    fontSize: 12, 
+    marginTop: 3, 
+    marginLeft: 5, 
+    fontWeight: '500' 
+  },
 });

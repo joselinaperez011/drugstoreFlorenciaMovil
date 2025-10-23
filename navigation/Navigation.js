@@ -6,6 +6,8 @@ import { auth } from '../src/config/firebaseConfig';
 import Login from '../screens/Login';
 import SignUp from '../screens/SignUp';
 import Home from '../screens/Home';
+import EditProfile from '../screens/EditProfile';
+import ViewProfile from '../screens/ViewProfile';
 
 const Stack = createStackNavigator();
 
@@ -28,11 +30,13 @@ function Navigation() {
     <NavigationContainer>
       <Stack.Navigator 
         initialRouteName={isAuthenticated ? "Home" : "Login"}
-        screenOptions={{ headerShown: false }} // ← CORRECTO
+        screenOptions={{ headerShown: false }}
       >
         <Stack.Screen name="Login" component={Login} />
         <Stack.Screen name="SignUp" component={SignUp} />
         <Stack.Screen name="Home" component={Home} />
+        <Stack.Screen name="ViewProfile" component={ViewProfile} />
+        <Stack.Screen name="EditProfile" component={EditProfile} />
       </Stack.Navigator>
     </NavigationContainer>
   );
