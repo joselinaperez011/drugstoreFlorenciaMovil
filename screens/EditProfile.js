@@ -9,15 +9,17 @@ import {
   ImageBackground,
   Alert,
   Platform,
-  Image
+  Image,
+  KeyboardAvoidingView,
+  Keyboard,
+  TouchableWithoutFeedback
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
-import { db } from '../src/config/firebaseConfig';
+import { db, auth } from '../src/config/firebaseConfig'; 
 import { doc, setDoc } from 'firebase/firestore';
-// NUEVO: Importar Cloudinary
 import { uploadToCloudinary } from '../src/config/cloudinary';
 
 export default function EditProfile({ navigation, route }) {
@@ -39,13 +41,12 @@ export default function EditProfile({ navigation, route }) {
   const [isSaving, setIsSaving] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
 
-  // NUEVO: Función REAL para subir imagen a Cloudinary
+  // Función para subir imagen a Cloudinary
   const uploadImageToCloudinary = async (imageUri) => {
     try {
       setUploadingImage(true);
       console.log('Subiendo imagen a Cloudinary...');
       
-      // LLAMADA REAL A CLOUDINARY
       const imageUrl = await uploadToCloudinary(imageUri);
       console.log('Imagen subida exitosamente:', imageUrl);
       
@@ -145,7 +146,16 @@ export default function EditProfile({ navigation, route }) {
 
   const saveToFirestore = async (userData) => {
     try {
-      const userRef = doc(db, 'users', 'prueba');
+      const user = auth.currentUser;
+      let userRef;
+      
+      if (user) {
+        userRef = doc(db, 'users', user.uid);
+        console.log('Guardando en documento del usuario:', user.uid);
+      } else {
+        userRef = doc(db, 'users', 'prueba');
+        console.log('Guardando en documento prueba (fallback)');
+      }
       
       await setDoc(userRef, {
         nombre: userData.name,
@@ -156,14 +166,21 @@ export default function EditProfile({ navigation, route }) {
         fecha_de_nacimiento: userData.birthDate,
         dni: userData.dni,
         género: userData.gender,
-        foto_perfil: userData.profileImage, // ✅ Se guarda la URL de Cloudinary
+        foto_perfil: userData.profileImage,
         timestamp: new Date()
       }, { merge: true });
       
-      console.log('Datos guardados en Firestore con foto:', userData.profileImage);
+      console.log('✅ Datos guardados en Firestore:', {
+        nombre: userData.name,
+        teléfono: userData.phone,
+        dirección: userData.address,
+        dni: userData.dni,
+        género: userData.gender
+      });
       return true;
     } catch (error) {
-      console.error('Error guardando en Firestore:', error);
+      console.error('❌ Error guardando en Firestore:', error);
+      Alert.alert('Error', `No se pudo guardar: ${error.message}`);
       return false;
     }
   };
@@ -179,6 +196,8 @@ export default function EditProfile({ navigation, route }) {
         return;
       }
 
+      console.log('📝 Guardando datos:', formData);
+
       const firestoreSuccess = await saveToFirestore(formData);
       
       if (firestoreSuccess) {
@@ -187,9 +206,17 @@ export default function EditProfile({ navigation, route }) {
         }
         
         Alert.alert(
-          'Perfil actualizado', 
+          '✅ Perfil actualizado', 
           'Los datos y foto se guardaron correctamente',
-          [{ text: 'OK', onPress: () => navigation.goBack() }]
+          [{ 
+            text: 'OK', 
+            onPress: () => {
+              navigation.navigate('ViewProfile', { 
+                refresh: true,
+                timestamp: new Date().getTime()
+              });
+            }
+          }]
         );
       } else {
         Alert.alert('Error', 'No se pudo guardar en la base de datos');
@@ -216,184 +243,198 @@ export default function EditProfile({ navigation, route }) {
       source={require('../assets/fondo.jpeg')}
       style={styles.backgroundImage}
       resizeMode="cover"
-    >
-      <View style={styles.container}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
-          >
-            <MaterialIcons name="arrow-back" size={24} color="white" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Editar Perfil</Text>
-          <View style={styles.placeholder} />
-        </View>
+    > 
+      <KeyboardAvoidingView 
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+      >
+        <TouchableWithoutFeedback onPress={() => Keyboard.dismiss()}>
+          <View style={styles.container}>
+            {/* Header */}
+            <View style={styles.header}>
+              <TouchableOpacity
+                style={styles.backButton}
+                onPress={() => navigation.goBack()}
+              >
+                <MaterialIcons name="arrow-back" size={24} color="white" />
+              </TouchableOpacity>
+              <Text style={styles.headerTitle}>Editar Perfil</Text>
+              <View style={styles.placeholder} />
+            </View>
 
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-          {/* SECCIÓN SUPERIOR CON FOTO */}
-          <View style={styles.profileHeader}>
-            <TouchableOpacity 
-              style={styles.photoContainer}
-              onPress={showImageOptions}
-              disabled={uploadingImage || isSaving}
+            <ScrollView 
+              style={styles.content}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={styles.scrollContent}
             >
-              {formData.profileImage ? (
-                <Image 
-                  source={{ uri: formData.profileImage }} 
-                  style={styles.profileImage}
-                />
-              ) : (
-                <View style={styles.placeholderImage}>
-                  <MaterialIcons name="add-a-photo" size={30} color="#7F8C8D" />
-                </View>
-              )}
-              
-              {/* Badge de cámara */}
-              <View style={styles.cameraBadge}>
-                <MaterialIcons name="photo-camera" size={16} color="white" />
+              {/* SECCIÓN SUPERIOR CON FOTO */}
+              <View style={styles.profileHeader}>
+                <TouchableOpacity 
+                  style={styles.photoContainer}
+                  onPress={showImageOptions}
+                  disabled={uploadingImage || isSaving}
+                >
+                  {formData.profileImage ? (
+                    <Image 
+                      source={{ uri: formData.profileImage }} 
+                      style={styles.profileImage}
+                    />
+                  ) : (
+                    <View style={styles.placeholderImage}>
+                      <MaterialIcons name="add-a-photo" size={30} color="#7F8C8D" />
+                    </View>
+                  )}
+                  
+                  {/* Badge de cámara */}
+                  <View style={styles.cameraBadge}>
+                    <MaterialIcons name="photo-camera" size={16} color="white" />
+                  </View>
+
+                  {/* Indicador de carga */}
+                  {uploadingImage && (
+                    <View style={styles.uploadingOverlay}>
+                      <MaterialIcons name="cloud-upload" size={24} color="white" />
+                      <Text style={styles.uploadingText}>Subiendo...</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+
+                <Text style={styles.profileName}>
+                  {formData.name} {formData.lastName}
+                </Text>
+                <Text style={styles.profileEmail}>{formData.email}</Text>
+                <Text style={styles.profilePhone}>{formData.phone || 'Sin teléfono'}</Text>
+                
+                {formData.profileImage && (
+                  <Text style={styles.photoSavedText}>✓ Foto guardada en la nube</Text>
+                )}
               </View>
 
-              {/* Indicador de carga */}
-              {uploadingImage && (
-                <View style={styles.uploadingOverlay}>
-                  <MaterialIcons name="cloud-upload" size={24} color="white" />
-                  <Text style={styles.uploadingText}>Subiendo...</Text>
+              {/* INFORMACIÓN PERSONAL */}
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Información Personal</Text>
+
+                {/* Nombre */}
+                <Text style={styles.label}>Nombre *</Text>
+                <TextInput
+                  style={styles.input}
+                  value={formData.name}
+                  onChangeText={(text) => handleChange('name', text)}
+                  placeholder="Ingrese su nombre"
+                />
+
+                {/* Apellido */}
+                <Text style={styles.label}>Apellido *</Text>
+                <TextInput
+                  style={styles.input}
+                  value={formData.lastName}
+                  onChangeText={(text) => handleChange('lastName', text)}
+                  placeholder="Ingrese su apellido"
+                />
+
+                {/* Correo electrónico (solo lectura) */}
+                <Text style={styles.label}>Correo electrónico *</Text>
+                <TextInput
+                  style={[styles.input, styles.disabledInput]}
+                  value={formData.email}
+                  editable={false}
+                  selectTextOnFocus={false}
+                />
+
+                {/* Teléfono */}
+                <Text style={styles.label}>Teléfono</Text>
+                <TextInput
+                  style={styles.input}
+                  value={formData.phone}
+                  onChangeText={(text) => handleChange('phone', text)}
+                  placeholder="Ingrese su teléfono"
+                  keyboardType="phone-pad"
+                />
+
+                {/* Domicilio */}
+                <Text style={styles.label}>Domicilio</Text>
+                <TextInput
+                  style={styles.input}
+                  value={formData.address}
+                  onChangeText={(text) => handleChange('address', text)}
+                  placeholder="Ingrese su domicilio"
+                />
+
+                {/* Fecha de nacimiento con calendario */}
+                <Text style={styles.label}>Fecha de nacimiento</Text>
+                <TouchableOpacity
+                  style={styles.dateInput}
+                  onPress={() => setShowDatePicker(true)}
+                >
+                  <Text style={styles.dateText}>
+                    {formData.birthDate || 'Seleccionar fecha'}
+                  </Text>
+                  <MaterialIcons name="calendar-today" size={20} color="#035c70" />
+                </TouchableOpacity>
+
+                {showDatePicker && (
+                  <DateTimePicker
+                    value={
+                      formData.birthDate
+                        ? new Date(formData.birthDate.split('/').reverse().join('-'))
+                        : new Date()
+                    }
+                    mode="date"
+                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                    onChange={handleDateChange}
+                    maximumDate={new Date()}
+                  />
+                )}
+
+                {/* DNI */}
+                <Text style={styles.label}>DNI</Text>
+                <TextInput
+                  style={styles.input}
+                  value={formData.dni}
+                  onChangeText={(text) => handleChange('dni', text)}
+                  placeholder="Ingrese su DNI"
+                  keyboardType="numeric"
+                />
+
+                {/* Género (Selector) */}
+                <Text style={styles.label}>Género</Text>
+                <View style={styles.pickerContainer}>
+                  <Picker
+                    selectedValue={formData.gender}
+                    onValueChange={(itemValue) => handleChange('gender', itemValue)}
+                    style={styles.picker}
+                  >
+                    <Picker.Item label="Seleccionar género" value="" />
+                    <Picker.Item label="Femenino" value="Femenino" />
+                    <Picker.Item label="Masculino" value="Masculino" />
+                    <Picker.Item label="Otro" value="Otro" />
+                    <Picker.Item label="Prefiero no decirlo" value="No especificado" />
+                  </Picker>
                 </View>
-              )}
-            </TouchableOpacity>
+              </View>
 
-            <Text style={styles.profileName}>
-              {formData.name} {formData.lastName}
-            </Text>
-            <Text style={styles.profileEmail}>{formData.email}</Text>
-            <Text style={styles.profilePhone}>{formData.phone}</Text>
-            
-            {formData.profileImage && (
-              <Text style={styles.photoSavedText}>✓ Foto guardada en la nube</Text>
-            )}
-          </View>
-
-          {/* INFORMACIÓN PERSONAL */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Información Personal</Text>
-
-            {/* Nombre */}
-            <Text style={styles.label}>Nombre</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.name}
-              onChangeText={(text) => handleChange('name', text)}
-              placeholder="Ingrese su nombre"
-            />
-
-            {/* Apellido */}
-            <Text style={styles.label}>Apellido</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.lastName}
-              onChangeText={(text) => handleChange('lastName', text)}
-              placeholder="Ingrese su apellido"
-            />
-
-            {/* Correo electrónico (solo lectura) */}
-            <Text style={styles.label}>Correo electrónico</Text>
-            <TextInput
-              style={[styles.input, styles.disabledInput]}
-              value={formData.email}
-              editable={false}
-              selectTextOnFocus={false}
-            />
-
-            {/* Teléfono */}
-            <Text style={styles.label}>Teléfono</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.phone}
-              onChangeText={(text) => handleChange('phone', text)}
-              placeholder="Ingrese su teléfono"
-              keyboardType="phone-pad"
-            />
-
-            {/* Domicilio */}
-            <Text style={styles.label}>Domicilio</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.address}
-              onChangeText={(text) => handleChange('address', text)}
-              placeholder="Ingrese su domicilio"
-            />
-
-            {/* Fecha de nacimiento con calendario */}
-            <Text style={styles.label}>Fecha de nacimiento</Text>
-            <TouchableOpacity
-              style={styles.dateInput}
-              onPress={() => setShowDatePicker(true)}
-            >
-              <Text style={styles.dateText}>
-                {formData.birthDate || 'Seleccionar fecha'}
-              </Text>
-              <MaterialIcons name="calendar-today" size={20} color="#035c70" />
-            </TouchableOpacity>
-
-            {showDatePicker && (
-              <DateTimePicker
-                value={
-                  formData.birthDate
-                    ? new Date(formData.birthDate.split('/').reverse().join('-'))
-                    : new Date()
-                }
-                mode="date"
-                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                onChange={handleDateChange}
-                maximumDate={new Date()}
-              />
-            )}
-
-            {/* DNI */}
-            <Text style={styles.label}>DNI</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.dni}
-              onChangeText={(text) => handleChange('dni', text)}
-              placeholder="Ingrese su DNI"
-              keyboardType="numeric"
-            />
-
-            {/* Género (Selector) */}
-            <Text style={styles.label}>Género</Text>
-            <View style={styles.pickerContainer}>
-              <Picker
-                selectedValue={formData.gender}
-                onValueChange={(itemValue) => handleChange('gender', itemValue)}
-                style={styles.picker}
+              {/* Botón Guardar */}
+              <TouchableOpacity 
+                style={[styles.saveButton, (isSaving || uploadingImage) && styles.disabledButton]} 
+                onPress={handleSave}
+                disabled={isSaving || uploadingImage}
               >
-                <Picker.Item label="Seleccionar género" value="" />
-                <Picker.Item label="Femenino" value="Femenino" />
-                <Picker.Item label="Masculino" value="Masculino" />
-                <Picker.Item label="Otro" value="Otro" />
-                <Picker.Item label="Prefiero no decirlo" value="No especificado" />
-              </Picker>
-            </View>
+                <MaterialIcons name="save" size={20} color="white" />
+                <Text style={styles.saveButtonText}>
+                  {isSaving ? 'Guardando...' : 'Guardar Cambios'}
+                </Text>
+              </TouchableOpacity>
+
+              <Text style={styles.requiredText}>* Campos obligatorios</Text>
+
+              {/* Espacio para el teclado */}
+              <View style={styles.keyboardSpacer} />
+            </ScrollView>
           </View>
-
-          {/* Botón Guardar */}
-          <TouchableOpacity 
-            style={[styles.saveButton, (isSaving || uploadingImage) && styles.disabledButton]} 
-            onPress={handleSave}
-            disabled={isSaving || uploadingImage}
-          >
-            <MaterialIcons name="save" size={20} color="white" />
-            <Text style={styles.saveButtonText}>
-              {isSaving ? 'Guardando...' : 'Guardar Cambios'}
-            </Text>
-          </TouchableOpacity>
-
-          <Text style={styles.requiredText}>* Campos obligatorios</Text>
-
-          <View style={styles.spacer} />
-        </ScrollView>
-      </View>
+        </TouchableWithoutFeedback>
+      </KeyboardAvoidingView>
     </ImageBackground>
   );
 }
@@ -406,7 +447,7 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.3)',
+    backgroundColor: 'rgba(0,0,0,0)',
   },
   header: {
     flexDirection: 'row',
@@ -424,7 +465,16 @@ const styles = StyleSheet.create({
     color: 'white',
   },
   placeholder: { width: 30 },
-  content: { flex: 1, padding: 20 },
+  content: { 
+    flex: 1,
+  },
+  scrollContent: {
+    padding: 20,
+    paddingBottom: 0,
+  },
+  keyboardSpacer: {
+    height: 100,
+  },
   
   /* ESTILOS PARA EL HEADER CON FOTO */
   profileHeader: {
@@ -595,5 +645,4 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 10,
   },
-  spacer: { height: 30 },
 });

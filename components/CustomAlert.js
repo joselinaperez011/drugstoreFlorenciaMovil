@@ -1,6 +1,7 @@
 // components/CustomAlert.js
 import React from 'react';
 import { Modal, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 
 const CustomAlert = ({ 
   visible, 
@@ -8,20 +9,43 @@ const CustomAlert = ({
   message, 
   type = 'info', 
   onConfirm,
-  confirmText = "Aceptar"
+  confirmText = "Aceptar",
+  showCancel = false,
+  onCancel,
+  cancelText = "Cancelar"
 }) => {
   const getTheme = () => {
     switch(type) {
       case 'success':
-        return { bg: '#7ccc3bff', text: 'white' };
+        return { 
+          bg: '#12B05B',
+          icon: 'check-circle',
+          iconColor: 'white'
+        };
       case 'error':
-        return { bg: '#1B88B8', text: 'white' };
+        return { 
+          bg: '#E74C3C',
+          icon: 'error',
+          iconColor: 'white'
+        };
       case 'info':
-        return { bg: '#f3a23eff', text: 'white' };
+        return { 
+          bg: '#035c70',
+          icon: 'info',
+          iconColor: 'white'
+        };
       case 'warning':
-        return { bg: '#FFC680', text: 'white' };
+        return { 
+          bg: '#f3a23eff',
+          icon: 'warning',
+          iconColor: 'white'
+        };
       default:
-        return { bg: '#3498DB', text: 'white' };
+        return { 
+          bg: '#035c70',
+          icon: 'info',
+          iconColor: 'white'
+        };
     }
   };
 
@@ -34,30 +58,36 @@ const CustomAlert = ({
       visible={visible}
       transparent={true}
       animationType="fade"
-      onRequestClose={onConfirm}
+      onRequestClose={onCancel || onConfirm}
     >
-      <View style={styles.overlay}>
-        <View style={styles.container}>
-          {/* Header */}
-          <View style={[styles.header, { backgroundColor: theme.bg }]}>
-            <Text style={styles.icon}>{theme.icon}</Text>
-            <Text style={[styles.title, { color: theme.text }]}>{title}</Text>
-          </View>
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          {/* Título */}
+          <Text style={styles.modalTitle}>{title}</Text>
           
-          {/* Body */}
-          <View style={styles.body}>
-            <Text style={styles.message}>{message}</Text>
-          </View>
+          {/* Mensaje */}
+          <Text style={styles.modalText}>{message}</Text>
           
-          {/* Footer */}
-          <View style={styles.footer}>
+          {/* Icono según el tipo */}
+          <View style={[styles.iconContainer, { backgroundColor: theme.bg }]}>
+            <MaterialIcons name={theme.icon} size={32} color={theme.iconColor} />
+          </View>
+
+          {/* Botones */}
+          <View style={styles.modalButtons}>
+            {showCancel && (
+              <TouchableOpacity 
+                style={[styles.modalButton, styles.cancelButton]}
+                onPress={onCancel}
+              >
+                <Text style={styles.cancelButtonText}>{cancelText}</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity 
-              style={[styles.button, { backgroundColor: theme.bg }]}
+              style={[styles.modalButton, { backgroundColor: theme.bg }]}
               onPress={onConfirm}
             >
-              <Text style={[styles.buttonText, { color: theme.text }]}>
-                {confirmText}
-              </Text>
+              <Text style={styles.confirmButtonText}>{confirmText}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -67,63 +97,74 @@ const CustomAlert = ({
 };
 
 const styles = StyleSheet.create({
-  overlay: {
+  modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
   },
-  container: {
+  modalContent: {
     backgroundColor: 'white',
     borderRadius: 15,
+    padding: 25,
     width: '100%',
     maxWidth: 350,
-    overflow: 'hidden',
-    elevation: 10,
+    elevation: 5,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
-  },
-  header: {
-    padding: 20,
     alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'center',
   },
-  icon: {
-    fontSize: 24,
-    marginRight: 10,
-  },
-  title: {
-    fontSize: 18,
+  modalTitle: {
+    fontSize: 20,
     fontWeight: 'bold',
+    color: '#2C3E50',
+    marginBottom: 15,
     textAlign: 'center',
   },
-  body: {
-    padding: 20,
-  },
-  message: {
+  modalText: {
     fontSize: 16,
-    color: '#333',
+    color: '#7F8C8D',
     textAlign: 'center',
+    marginBottom: 20,
     lineHeight: 22,
   },
-  footer: {
-    padding: 15,
-    backgroundColor: '#f8f9fa',
-    borderTopWidth: 1,
-    borderTopColor: '#dee2e6',
+  iconContainer: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
   },
-  button: {
-    padding: 12,
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: 12,
     borderRadius: 8,
     alignItems: 'center',
+    marginHorizontal: 5,
   },
-  buttonText: {
+  cancelButton: {
+    backgroundColor: '#ECF0F1',
+    borderWidth: 1,
+    borderColor: '#BDC3C7',
+  },
+  cancelButtonText: {
+    color: '#2C3E50',
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '600',
+  },
+  confirmButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
 

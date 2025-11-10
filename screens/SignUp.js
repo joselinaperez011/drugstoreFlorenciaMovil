@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ImageBackground, KeyboardAvoidingView, Platform, ScrollView} from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ImageBackground, KeyboardAvoidingView, Platform, ScrollView, Image } from 'react-native';
 import { FontAwesome } from '@expo/vector-icons';
 import { auth } from '../src/config/firebaseConfig';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { db } from '../src/config/firebaseConfig';
+import { doc, setDoc } from 'firebase/firestore';
 import CustomAlert from '../components/CustomAlert';
 
 export default function SignUp({ navigation }) {
@@ -19,7 +21,6 @@ export default function SignUp({ navigation }) {
   const [showAlert, setShowAlert] = useState(false);
   const [alertConfig, setAlertConfig] = useState({});
 
-  // ALERTS PERSONALIZADOS
   const showCustomAlert = (title, message, type = 'info') => {
     setAlertConfig({
       title,
@@ -30,7 +31,6 @@ export default function SignUp({ navigation }) {
     setShowAlert(true);
   };
 
-  // Validar solo letras para nombre y apellido
   const validateName = (text, fieldName) => {
     const lettersOnly = /^[A-Za-zÁáÉéÍíÓóÚúÑñ\s]*$/;
     if (!lettersOnly.test(text)) {
@@ -52,7 +52,6 @@ export default function SignUp({ navigation }) {
     }
   };
 
-  // Validación en tiempo real para email
   const validateEmailRealTime = (text) => {
     setEmail(text);
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -68,7 +67,6 @@ export default function SignUp({ navigation }) {
     setErrors(newErrors);
   };
 
-  // Validación en tiempo real para contraseña
   const validatePasswordRealTime = (text) => {
     setPassword(text);
     const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
@@ -84,7 +82,6 @@ export default function SignUp({ navigation }) {
     setErrors(newErrors);
   };
 
-  // Validación en tiempo real para confirmar contraseña
   const validateConfirmPasswordRealTime = (text) => {
     setConfirmPassword(text);
     const newErrors = {...errors};
@@ -123,7 +120,6 @@ export default function SignUp({ navigation }) {
   };
 
   const handleSignUp = async () => {
-    // Verificar si TODOS los campos están vacíos
     const allFieldsEmpty = !firstName.trim() && !lastName.trim() && !email.trim() && !password.trim() && !confirmPassword.trim();
     
     if (allFieldsEmpty) {
@@ -131,19 +127,31 @@ export default function SignUp({ navigation }) {
       return;
     }
 
-    // Si no están todos vacíos, hacer la validación normal
     if (!validateFields()) return;
 
     setLoading(true);
 
     try {
-      // Crear usuario en Firebase Auth
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
 
-      // Actualizar el displayName en Auth con nombre completo
       await updateProfile(user, {
         displayName: `${firstName} ${lastName}`
+      });
+
+      // 🔥 GUARDAR EN FIRESTORE CON EL ID DEL USUARIO
+      await setDoc(doc(db, 'users', user.uid), {
+        nombre: firstName.trim(),
+        apellido: lastName.trim(),
+        email: email.trim(),
+        teléfono: '',
+        dirección: '',
+        fecha_de_nacimiento: '',
+        dni: '',
+        género: '',
+        foto_perfil: '',
+        fecha_creacion: new Date(),
+        uid: user.uid
       });
 
       showCustomAlert("¡Registro exitoso!", "Usuario registrado con éxito. Ahora puedes iniciar sesión.", "success");
@@ -172,22 +180,17 @@ export default function SignUp({ navigation }) {
     }
   };
 
-  // Función que se ejecuta cuando se confirma el alert
   const handleAlertConfirm = () => {
     setShowAlert(false);
-    // Si es éxito, navegar al login
     if (alertConfig.type === 'success') {
       navigation.navigate('Login');
     }
   };
 
-  // Validaciones en tiempo real para la contraseña
   const hasMinLength = password.length >= 8;
   const hasUpperCase = /[A-Z]/.test(password);
   const hasLowerCase = /[a-z]/.test(password);
   const hasNumber = /[0-9]/.test(password);
-
-  // Verificar si las contraseñas coinciden
   const passwordsMatch = password === confirmPassword && confirmPassword.length > 0;
 
   return (
@@ -209,7 +212,6 @@ export default function SignUp({ navigation }) {
           <View style={styles.card}>
             <Text style={styles.title}>Crea tu cuenta</Text>
 
-            {/* NOMBRE */}
             <View style={styles.boxContainer}>
               <View style={styles.boxInput}>
                 <FontAwesome name="user" size={20} color="#FFAB32" style={styles.icon} />
@@ -227,7 +229,6 @@ export default function SignUp({ navigation }) {
               ) : null}
             </View>
 
-            {/* APELLIDO */}
             <View style={styles.boxContainer}>
               <View style={styles.boxInput}>
                 <FontAwesome name="user" size={20} color="#FFAB32" style={styles.icon} />
@@ -245,7 +246,6 @@ export default function SignUp({ navigation }) {
               ) : null}
             </View>
 
-            {/* EMAIL */}
             <View style={styles.boxContainer}>
               <View style={styles.boxInput}>
                 <FontAwesome name="envelope" size={20} color="#FFAB32" style={styles.icon} />
@@ -263,7 +263,6 @@ export default function SignUp({ navigation }) {
               {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
             </View>
 
-            {/* CONTRASEÑA */}
             <View style={styles.boxContainer}>
               <View style={styles.boxInput}>
                 <FontAwesome name="lock" size={20} color="#FFAB32" style={styles.icon} />
@@ -303,7 +302,6 @@ export default function SignUp({ navigation }) {
               </View>
             </View>
 
-            {/* CONFIRMAR CONTRASEÑA */}
             <View style={styles.boxContainer}>
               <View style={styles.boxInput}>
                 <FontAwesome name="lock" size={20} color="#FFAB32" style={styles.icon} />
@@ -351,7 +349,6 @@ export default function SignUp({ navigation }) {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {/* ALERT PERSONALIZADO CON MODAL */}
       <CustomAlert
         visible={showAlert}
         title={alertConfig.title}

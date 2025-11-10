@@ -8,6 +8,9 @@ import SignUp from '../screens/SignUp';
 import Home from '../screens/Home';
 import EditProfile from '../screens/EditProfile';
 import ViewProfile from '../screens/ViewProfile';
+import AddProduct from '../screens/AddProduct';
+import Products from '../screens/Products';
+
 
 const Stack = createStackNavigator();
 
@@ -37,6 +40,9 @@ function Navigation() {
         <Stack.Screen name="Home" component={Home} />
         <Stack.Screen name="ViewProfile" component={ViewProfile} />
         <Stack.Screen name="EditProfile" component={EditProfile} />
+        <Stack.Screen name="AddProduct" component={AddProduct} />
+        <Stack.Screen name="Products" component={Products} />
+
       </Stack.Navigator>
     </NavigationContainer>
   );

@@ -206,8 +206,7 @@ const styles = StyleSheet.create({
   registerLink: {
     color: '#087182',
     fontSize: 16,
-    fontWeight: '500',
-    textDecorationLine: 'underline',
+    fontWeight: 'bold',
     textDecorationColor: '#087182',
     textDecorationStyle: 'solid',
   },  

@@ -5,33 +5,288 @@ import {
   TouchableOpacity, 
   StyleSheet, 
   Image, 
-  ImageBackground,
   ScrollView,
   Dimensions,
   Modal,
-  BackHandler
+  BackHandler,
+  ImageBackground
 } from 'react-native';
 import { signOut } from 'firebase/auth';
 import { auth } from '../src/config/firebaseConfig';
 import { FontAwesome, MaterialIcons } from '@expo/vector-icons';
-// Importar Firestore
 import { db } from '../src/config/firebaseConfig';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, getDocs, onSnapshot } from 'firebase/firestore';
+import { useIsFocused } from '@react-navigation/native';
+import Svg, { Circle, G } from 'react-native-svg';
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
+
+// Componente para el saludo del usuario
+const UserGreeting = ({ userName }) => (
+  <View style={styles.greetingContainer}>
+    <Text style={styles.greetingText}>Hola, {userName}!</Text>
+    <Text style={styles.greetingSubtitle}>Inicio</Text>
+  </View>
+);
+
+// Componente para las tarjetas del dashboard
+const DashboardCards = ({ navigation }) => {
+  const cards = [
+    {
+      id: 1,
+      title: 'Productos',
+      icon: 'inventory',
+      onPress: () => navigation.navigate('Products'),
+      color: '#00797B'
+    },
+    {
+      id: 2,
+      title: 'Caja',
+      icon: 'payments',
+      onPress: () => console.log('Caja presionada'),
+      color: '#00797B'
+    },
+    {
+      id: 3,
+      title: 'Venta',
+      icon: 'shopping-cart',
+      onPress: () => console.log('Venta presionada'),
+      color: '#00797B'
+    },
+    {
+      id: 4,
+      title: 'Empleados',
+      icon: 'people',
+      onPress: () => console.log('Empleados presionado'),
+      color: '#00797B'
+    }
+  ];
+
+  return (
+    <View style={styles.cardsContainer}>
+      {cards.map((card) => (
+        <TouchableOpacity
+          key={card.id}
+          style={styles.card}
+          onPress={card.onPress}
+          activeOpacity={0.7}
+        >
+          <View style={styles.cardContent}>
+            <MaterialIcons 
+              name={card.icon} 
+              size={30} 
+              color={card.color} 
+              style={styles.cardIcon}
+            />
+            <Text style={styles.cardText} numberOfLines={2} adjustsFontSizeToFit>
+              {card.title}
+            </Text>
+          </View>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+};
+
+// Componente para los botones del menú principal
+const MainMenuButtons = ({ navigation }) => (
+  <View style={styles.menuButtonsContainer}>
+    <DashboardCards navigation={navigation} />
+  </View>
+);
+
+// Componente para las estadísticas de productos
+const ProductStats = ({ totalProducts }) => {
+  const productCards = [
+    {
+      id: 1,
+      title: 'Total de productos',
+      value: totalProducts,
+    },
+    {
+      id: 2,
+      title: 'Productos vendidos',
+      value: 0,
+    }
+  ];
+
+  return (
+    <View style={styles.productStatsContainer}>
+      <Text style={styles.productStatsTitle}>Productos</Text>
+      <View style={styles.productCardsContainer}>
+        {productCards.map((card) => (
+          <TouchableOpacity
+            key={card.id}
+            style={styles.productCard}
+            activeOpacity={0.7}
+          >
+            <View style={styles.productCardContent}>
+              <Text style={styles.productCardValue}>{card.value}</Text>
+              <Text style={styles.productCardLabel}>{card.title}</Text>
+            </View>
+          </TouchableOpacity>
+        ))}
+      </View>
+    </View>
+  );
+};
+
+// Componente para las categorías con pie chart REAL
+const CategoriesList = ({ categories }) => {
+  // Paleta de colores
+  const categoryColors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4'];
+  
+  // Datos de ejemplo basados en tu imagen
+  const displayCategories = categories.length > 0 ? categories.slice(0, 4) : [
+    { name: 'Limpieza', percentage: '16.7' },
+    { name: 'Bebidas', percentage: '16.7' },
+    { name: 'Golosinas', percentage: '16.7' },
+    { name: 'Congelados', percentage: '16.7' }
+  ];
+
+  // Calcular los segmentos del pie chart
+  const calculateSegments = () => {
+    const segments = [];
+    let currentAngle = 0;
+    
+    displayCategories.forEach((category, index) => {
+      const percentage = parseFloat(category.percentage) || 0;
+      const angle = (percentage / 100) * 360;
+      const color = categoryColors[index % categoryColors.length];
+      
+      segments.push({
+        percentage,
+        angle,
+        startAngle: currentAngle,
+        color,
+        name: category.name
+      });
+      
+      currentAngle += angle;
+    });
+    
+    return segments;
+  };
+
+  const segments = calculateSegments();
+  const size = 100;
+  const radius = size / 2;
+  const circumference = 2 * Math.PI * (radius - 2);
+
+  return (
+    <View style={styles.categoriesContainer}>
+      <Text style={styles.categoriesTitle}>Categorías</Text>
+      
+      <View style={styles.categoriesContent}>
+        {/* Pie Chart REAL con SVG */}
+        <View style={styles.pieChartContainer}>
+          <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+            <G rotation="-90" origin={`${radius}, ${radius}`}>
+              {segments.map((segment, index) => {
+                const strokeDasharray = `${(segment.percentage / 100) * circumference} ${circumference}`;
+                
+                return (
+                  <Circle
+                    key={index}
+                    cx={radius}
+                    cy={radius}
+                    r={radius - 2}
+                    fill="none"
+                    stroke={segment.color}
+                    strokeWidth={4}
+                    strokeDasharray={strokeDasharray}
+                    strokeDashoffset="0"
+                    rotation={segment.startAngle}
+                    origin={`${radius}, ${radius}`}
+                  />
+                );
+              })}
+            </G>
+          </Svg>
+        </View>
+
+        {/* Leyenda de categorías */}
+        <View style={styles.legendContainer}>
+          {displayCategories.map((category, index) => {
+            const color = categoryColors[index % categoryColors.length];
+            return (
+              <View key={index} style={styles.legendItem}>
+                <View style={[styles.colorDot, { backgroundColor: color }]} />
+                <View style={styles.legendTextContainer}>
+                  <Text style={styles.legendPercentage}>{category.percentage}%</Text>
+                  <Text style={styles.legendName}>{category.name}</Text>
+                </View>
+              </View>
+            );
+          })}
+        </View>
+      </View>
+    </View>
+  );
+};
+
+// Componente para los últimos productos (estilo lista)
+const RecentProducts = ({ products }) => {
+  const lastProducts = products.slice(-3).reverse();
+  
+  return (
+    <View style={styles.recentProductsContainer}>
+      <Text style={styles.recentProductsTitle}>Últimos productos creados</Text>
+      <View style={styles.productsList}>
+        {lastProducts.length > 0 ? (
+          lastProducts.map((product) => (
+            <View key={product.id} style={styles.productItem}>
+              <View style={styles.productInfo}>
+                <Text style={styles.productName} numberOfLines={1}>
+                  {product.nombre || 'Sin nombre'}
+                </Text>
+                <Text style={styles.productPrice}>
+                  ${product.precio ? product.precio.toLocaleString() : '0'}
+                </Text>
+              </View>
+              {product.imagen ? (
+                <Image 
+                  source={{ uri: product.imagen }} 
+                  style={styles.productThumbnail}
+                  resizeMode="cover"
+                />
+              ) : (
+                <View style={styles.thumbnailPlaceholder}>
+                  <MaterialIcons name="inventory" size={20} color="#7F8C8D" />
+                </View>
+              )}
+            </View>
+          ))
+        ) : (
+          <Text style={styles.noProductsText}>No hay productos</Text>
+        )}
+      </View>
+    </View>
+  );
+};
+
+// Componente MenuItem para el modal - CON EL FORMATO SOLICITADO
+const MenuItem = ({ icon, title, onPress }) => (
+  <TouchableOpacity style={styles.menuItem} onPress={onPress}>
+    <MaterialIcons name={icon} size={24} color="#035c70" />
+    <Text style={styles.menuText}>{title}</Text>
+  </TouchableOpacity>
+);
 
 export default function Home({ navigation }) {
   const [menuVisible, setMenuVisible] = useState(false);
   const [profileModalVisible, setProfileModalVisible] = useState(false);
   const [userData, setUserData] = useState(null);
   const [firestoreData, setFirestoreData] = useState(null);
+  const [products, setProducts] = useState([]);
+  const [categories, setCategories] = useState([]);
+  
+  const isFocused = useIsFocused();
 
-  // Obtener datos del usuario al cargar
   useEffect(() => {
     const fetchUserData = async () => {
       const user = auth.currentUser;
       if (user) {
-        // Extraer nombre y apellido del displayName
         let name = "Usuario";
         let lastName = "";
         
@@ -49,7 +304,6 @@ export default function Home({ navigation }) {
           email: user.email || ""
         });
 
-        // CARGAR DATOS DESDE FIRESTORE
         await loadUserDataFromFirestore();
       }
     };
@@ -57,50 +311,104 @@ export default function Home({ navigation }) {
     fetchUserData();
   }, []);
 
-  // Recargar datos cuando el modal de perfil se abre
   useEffect(() => {
-    if (profileModalVisible) {
-      loadUserDataFromFirestore();
+    if (isFocused) {
+      console.log('🔄 Home está enfocado, recargando productos...');
+      loadProducts();
     }
-  }, [profileModalVisible]);
+  }, [isFocused]);
 
-  // Función para cargar datos desde Firestore
+  useEffect(() => {
+    const unsubscribe = onSnapshot(collection(db, 'products'), (snapshot) => {
+      console.log('📦 Datos de productos actualizados en tiempo real');
+      const productsData = [];
+      const categoriesCount = {};
+      
+      snapshot.forEach((doc) => {
+        const product = { id: doc.id, ...doc.data() };
+        productsData.push(product);
+        
+        if (product.categoria) {
+          categoriesCount[product.categoria] = (categoriesCount[product.categoria] || 0) + 1;
+        }
+      });
+      
+      setProducts(productsData);
+      
+      const totalProducts = productsData.length;
+      const categoriesWithPercentages = Object.entries(categoriesCount).map(([name, count]) => ({
+        name,
+        count,
+        percentage: totalProducts > 0 ? ((count / totalProducts) * 100).toFixed(1) : 0
+      }));
+      
+      setCategories(categoriesWithPercentages);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
   const loadUserDataFromFirestore = async () => {
     try {
-      const userRef = doc(db, 'users', 'prueba');
+      const user = auth.currentUser;
+      if (!user) return;
+
+      const userRef = doc(db, 'users', user.uid);
       const userSnap = await getDoc(userRef);
       
       if (userSnap.exists()) {
         const firestoreUserData = userSnap.data();
         setFirestoreData(firestoreUserData);
-        console.log('📸 Datos cargados desde Firestore en Home:', firestoreUserData);
       } else {
-        console.log('No se encontraron datos en Firestore');
+        await setDoc(doc(db, 'users', user.uid), {
+          nombre: userData?.name || '',
+          apellido: userData?.lastName || '',
+          email: user.email || '',
+          teléfono: '',
+          dirección: '',
+          fecha_de_nacimiento: '',
+          dni: '',
+          género: '',
+          foto_perfil: '',
+          fecha_creacion: new Date(),
+          uid: user.uid
+        });
       }
     } catch (error) {
       console.error('Error cargando datos de Firestore:', error);
     }
   };
 
-  // Botón de retroceso
-  useEffect(() => {
-    const backHandler = BackHandler.addEventListener(
-      'hardwareBackPress',
-      () => {
-        if (menuVisible) {
-          setMenuVisible(false);
-          return true;
+  const loadProducts = async () => {
+    try {
+      const querySnapshot = await getDocs(collection(db, 'products'));
+      const productsData = [];
+      const categoriesCount = {};
+      
+      querySnapshot.forEach((doc) => {
+        const product = { id: doc.id, ...doc.data() };
+        productsData.push(product);
+        
+        if (product.categoria) {
+          categoriesCount[product.categoria] = (categoriesCount[product.categoria] || 0) + 1;
         }
-        if (profileModalVisible) {
-          setProfileModalVisible(false);
-          return true;
-        }
-        return false;
-      }
-    );
-
-    return () => backHandler.remove();
-  }, [menuVisible, profileModalVisible]);
+      });
+      
+      setProducts(productsData);
+      
+      const totalProducts = productsData.length;
+      const categoriesWithPercentages = Object.entries(categoriesCount).map(([name, count]) => ({
+        name,
+        count,
+        percentage: totalProducts > 0 ? ((count / totalProducts) * 100).toFixed(1) : 0
+      }));
+      
+      setCategories(categoriesWithPercentages);
+      
+    } catch (error) {
+      console.error('Error cargando productos:', error);
+    }
+  };
 
   const handleLogOut = async () => {
     try {
@@ -113,14 +421,12 @@ export default function Home({ navigation }) {
 
   const handleViewProfile = () => {
     setProfileModalVisible(false);
-    // Pasar tanto los datos de auth como los de firestore
     navigation.navigate('ViewProfile', { 
       userData: userData,
       firestoreData: firestoreData
     });
   };
 
-  // Función para obtener el nombre completo desde Firestore
   const getFullName = () => {
     if (firestoreData && firestoreData.nombre && firestoreData.apellido) {
       return `${firestoreData.nombre} ${firestoreData.apellido}`;
@@ -131,7 +437,16 @@ export default function Home({ navigation }) {
     return "Usuario";
   };
 
-  // NUEVO: Función para renderizar la foto de perfil o iniciales
+  const getUserFirstName = () => {
+    if (firestoreData && firestoreData.nombre) {
+      return firestoreData.nombre;
+    }
+    if (userData) {
+      return userData.name;
+    }
+    return "Usuario";
+  };
+
   const renderProfileImage = () => {
     if (firestoreData && firestoreData.foto_perfil) {
       return (
@@ -147,44 +462,12 @@ export default function Home({ navigation }) {
       return (
         <View style={styles.avatarContainer}>
           <Text style={styles.avatarText}>
-            {getAvatarInitials()}
+            {getUserFirstName().charAt(0)}
           </Text>
         </View>
       );
     }
   };
-
-  // Función para obtener las iniciales del avatar
-  const getAvatarInitials = () => {
-    if (firestoreData && firestoreData.nombre && firestoreData.apellido) {
-      return `${firestoreData.nombre.charAt(0)}${firestoreData.apellido.charAt(0)}`;
-    }
-    if (userData) {
-      return `${userData.name.charAt(0)}${userData.lastName.charAt(0)}`;
-    }
-    return "U";
-  };
-
-  const MenuItem = ({ icon, title, onPress }) => (
-    <TouchableOpacity style={styles.menuItem} onPress={onPress}>
-      <MaterialIcons name={icon} size={24} color="#035c70" />
-      <Text style={styles.menuText}>{title}</Text>
-    </TouchableOpacity>
-  );
-
-  const StatCard = ({ value, title, color }) => (
-    <View style={[styles.statCard, { backgroundColor: color }]}>
-      <Text style={styles.statValue}>{value}</Text>
-      <Text style={styles.statTitle}>{title}</Text>
-    </View>
-  );
-
-  const QuickAction = ({ icon, title, color }) => (
-    <TouchableOpacity style={[styles.quickAction, { backgroundColor: color }]}>
-      <MaterialIcons name={icon} size={28} color="white" />
-      <Text style={styles.quickActionText}>{title}</Text>
-    </TouchableOpacity>
-  );
 
   return (
     <ImageBackground 
@@ -192,239 +475,144 @@ export default function Home({ navigation }) {
       style={styles.backgroundImage}
       resizeMode="cover"
     >
-      <View style={styles.container}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity 
-            style={styles.menuButton}
-            onPress={() => setMenuVisible(true)}
-          >
-            <MaterialIcons name="menu" size={28} color="white" />
-          </TouchableOpacity>
-          <View style={styles.headerTitle}>
-            <Text style={styles.storeName}>Florencia Drugstore</Text>
-          </View>
-          <TouchableOpacity 
-            style={styles.profileButton}
-            onPress={() => setProfileModalVisible(true)}
-          >
-            <MaterialIcons name="person" size={24} color="white" />
-          </TouchableOpacity>
-        </View>
-
-        {/* Contenido Principal */}
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-          {/* Estadísticas */}
-          <View style={styles.statsContainer}>
-            <StatCard 
-              value="$2.350" 
-              title="Caja actual" 
-              color="rgba(255,255,255,0.9)" 
-            />
-            <StatCard 
-              value="$3.480" 
-              title="Ventas del día" 
-              color="rgba(255,255,255,0.9)" 
-            />
-            <StatCard 
-              value="$1.210" 
-              title="Gastos del día" 
-              color="rgba(255,255,255,0.9)" 
-            />
-          </View>
-
-          {/* Acciones Rápidas */}
-          <View style={styles.sectionContainer}>
-            <Text style={styles.sectionTitle}>Acciones rápidas</Text>
-            <View style={styles.quickActions}>
-              <View style={styles.quickActionsRow}>
-                <QuickAction icon="point-of-sale" title="Registrar venta" color="#12B05B" />
-                <QuickAction icon="money-off" title="Registrar gasto" color="#EEA615" />
-              </View>
-              <View style={styles.quickActionsRow}>
-                <QuickAction icon="inventory" title="Inventario" color="#34495E" />
-                <QuickAction icon="local-shipping" title="Proveedores" color="#1B88B8" />
-              </View>
-              <View style={styles.quickActionsRow}>
-                <QuickAction icon="account-balance-wallet" title="Cierre de caja" color="#136C6B" />
-                <QuickAction icon="settings" title="Configuración" color="#3F847E" />
-              </View>
-            </View>
-          </View>
-
-          {/* Últimas Ventas */}
-          <View style={styles.sectionContainer}>
-            <Text style={styles.sectionTitle}>Últimas ventas</Text>
-            <View style={styles.salesList}>
-              <View style={styles.saleItem}>
-                <View style={styles.saleInfo}>
-                  <Text style={styles.productName}>Coca Cola 500ml</Text>
-                  <Text style={styles.saleTime}>Hace 15 min</Text>
-                </View>
-                <Text style={styles.saleAmount}>$1800</Text>
-              </View>
-              <View style={styles.saleItem}>
-                <View style={styles.saleInfo}>
-                  <Text style={styles.productName}>Snack Mix</Text>
-                  <Text style={styles.saleTime}>Hace 30 min</Text>
-                </View>
-                <Text style={styles.saleAmount}>$2300</Text>
-              </View>
-              <View style={styles.saleItem}>
-                <View style={styles.saleInfo}>
-                  <Text style={styles.productName}>Alfajor Milka</Text>
-                  <Text style={styles.saleTime}>Hace 45 min</Text>
-                </View>
-                <Text style={styles.saleAmount}>$1200</Text>
-              </View>
-            </View>
-          </View>
-
-          {/* Productos más vendidos */}
-          <View style={styles.sectionContainer}>
-            <Text style={styles.sectionTitle}>Productos más vendidos</Text>
-            <View style={styles.productsGrid}>
-              <View style={styles.productCard}>
-                <Text style={styles.productRank}>1</Text>
-                <Text style={styles.productNameSmall}>Coca Cola</Text>
-                <Text style={styles.productSales}>45 ventas</Text>
-              </View>
-              <View style={styles.productCard}>
-                <Text style={styles.productRank}>2</Text>
-                <Text style={styles.productNameSmall}>Snacks</Text>
-                <Text style={styles.productSales}>38 ventas</Text>
-              </View>
-              <View style={styles.productCard}>
-                <Text style={styles.productRank}>3</Text>
-                <Text style={styles.productNameSmall}>Cigarrillos</Text>
-                <Text style={styles.productSales}>32 ventas</Text>
-              </View>
-            </View>
-          </View>
-        </ScrollView>
-
-        {/* Menú Lateral */}
-        <Modal
-          animationType="fade"
-          transparent={true}
-          visible={menuVisible}
-          onRequestClose={() => setMenuVisible(false)}
+      {/* Header sobre el fondo */}
+      <View style={styles.headerOverlay}>
+        <TouchableOpacity 
+          style={styles.menuButton}
+          onPress={() => setMenuVisible(true)}
         >
-          <TouchableOpacity 
-            style={styles.menuOverlay}
-            activeOpacity={1}
-            onPress={() => setMenuVisible(false)}
-          >
-            <View style={styles.menuContainer}>
-              <View style={styles.menuHeader}>
-                <Text style={styles.menuTitle}>Menú Principal</Text>
-                <TouchableOpacity 
-                  style={styles.closeButton}
-                  onPress={() => setMenuVisible(false)}
-                >
-                  <MaterialIcons name="close" size={24} color="#035c70" />
-                </TouchableOpacity>
-              </View>
-              
-              <MenuItem 
-                icon="inventory" 
-                title="Productos" 
-                onPress={() => {
-                  setMenuVisible(false);
-                  // navigation.navigate('Products');
-                }} 
-              />
-              <MenuItem 
-                icon="point-of-sale" 
-                title="Ventas" 
-                onPress={() => {
-                  setMenuVisible(false);
-                  // navigation.navigate('Sales');
-                }} 
-              />
-              <MenuItem 
-                icon="local-shipping" 
-                title="Proveedores" 
-                onPress={() => {
-                  setMenuVisible(false);
-                  // navigation.navigate('Suppliers');
-                }} 
-              />
-              <MenuItem 
-                icon="settings" 
-                title="Configuración" 
-                onPress={() => {
-                  setMenuVisible(false);
-                  // navigation.navigate('Settings');
-                }} 
-              />
-              
-              <TouchableOpacity style={styles.logoutButton} onPress={handleLogOut}>
-                <MaterialIcons name="logout" size={24} color="#E74C3C" />
-                <Text style={styles.logoutText}>Cerrar Sesión</Text>
-              </TouchableOpacity>
-            </View>
-          </TouchableOpacity>
-        </Modal>
-
-        {/* Modal de Perfil ACTUALIZADO CON FOTO */}
-        <Modal
-          animationType="fade"
-          transparent={true}
-          visible={profileModalVisible}
-          onRequestClose={() => setProfileModalVisible(false)}
+          <MaterialIcons name="menu" size={28} color="white" />
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          style={styles.profileButton}
+          onPress={() => setProfileModalVisible(true)}
         >
-          <TouchableOpacity 
-            style={styles.profileOverlay}
-            activeOpacity={1}
-            onPress={() => setProfileModalVisible(false)}
-          >
-            <View style={styles.profileModal}>
-              {/* Información del usuario - ACTUALIZADO CON FOTO */}
-              {(userData || firestoreData) && (
-                <View style={styles.profileInfo}>
-                  {renderProfileImage()}
-                  <Text style={styles.profileName}>
-                    {getFullName()}
-                  </Text>
-                  <Text style={styles.profileEmail}>
-                    {userData?.email || firestoreData?.email || ""}
-                  </Text>
-                  {firestoreData && firestoreData.foto_perfil && (
-                    <Text style={styles.profileUpdated}>
-                      ✓ Foto de perfil
-                    </Text>
-                  )}
-                  {firestoreData && !firestoreData.foto_perfil && (
-                    <Text style={styles.profileUpdated}>
-                      ✓ Perfil actualizado
-                    </Text>
-                  )}
-                </View>
-              )}
-              
-              {/* Opciones del perfil - ACTUALIZADO */}
-              <TouchableOpacity 
-                style={styles.profileOption}
-                onPress={handleViewProfile}
-              >
-                <MaterialIcons name="visibility" size={20} color="#035c70" />
-                <Text style={styles.profileOptionText}>Ver perfil</Text>
-              </TouchableOpacity>
-              
-              <View style={styles.divider} />
-              
-              <TouchableOpacity 
-                style={styles.profileOption}
-                onPress={handleLogOut}
-              >
-                <MaterialIcons name="logout" size={20} color="#E74C3C" />
-                <Text style={[styles.profileOptionText, styles.logoutText]}>Cerrar sesión</Text>
-              </TouchableOpacity>
-            </View>
-          </TouchableOpacity>
-        </Modal>
+          <MaterialIcons name="person" size={24} color="white" />
+        </TouchableOpacity>
       </View>
+
+      {/* Contenido principal con card blanco */}
+      <View style={styles.mainContent}>
+        <ScrollView style={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          {/* Saludo del usuario */}
+          <UserGreeting userName={getUserFirstName()} />
+          
+          {/* Nuevas tarjetas minimalistas */}
+          <MainMenuButtons navigation={navigation} />
+          
+          {/* Estadísticas de productos */}
+          <ProductStats totalProducts={products.length} />
+          
+          {/* Categorías */}
+          <CategoriesList categories={categories} />
+          
+          {/* Últimos productos */}
+          <RecentProducts products={products} />
+        </ScrollView>
+      </View>
+
+      {/* Modal del menú - CON LOS ITEMS EN EL FORMATO SOLICITADO */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={menuVisible}
+        onRequestClose={() => setMenuVisible(false)}
+      >
+        <TouchableOpacity 
+          style={styles.menuOverlay}
+          activeOpacity={1}
+          onPress={() => setMenuVisible(false)}
+        >
+          <View style={styles.menuContainer}>
+            <View style={styles.menuHeader}>
+              <Text style={styles.menuTitle}>Menú Principal</Text>
+              <TouchableOpacity 
+                style={styles.closeButton}
+                onPress={() => setMenuVisible(false)}
+              >
+                <MaterialIcons name="close" size={24} color="#035c70" />
+              </TouchableOpacity>
+            </View>
+            
+            {/* ITEMS CON EL FORMATO SOLICITADO */}
+            <MenuItem 
+              icon="inventory" 
+              title="Productos" 
+              onPress={() => {
+                setMenuVisible(false);
+                navigation.navigate('Products');
+              }} 
+            />
+            <MenuItem 
+              icon="point-of-sale" 
+              title="Caja" 
+              onPress={() => {
+                setMenuVisible(false);
+                // navigation.navigate('Caja');
+              }} 
+            />
+            <MenuItem 
+              icon="shopping-cart" 
+              title="Venta" 
+              onPress={() => {
+                setMenuVisible(false);
+                // navigation.navigate('Venta');
+              }} 
+            />
+            <MenuItem 
+              icon="people" 
+              title="Empleados" 
+              onPress={() => {
+                setMenuVisible(false);
+                // navigation.navigate('Empleados');
+              }} 
+            />
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Modal del perfil (con imagen restaurada) */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={profileModalVisible}
+        onRequestClose={() => setProfileModalVisible(false)}
+      >
+        <TouchableOpacity 
+          style={styles.profileOverlay}
+          activeOpacity={1}
+          onPress={() => setProfileModalVisible(false)}
+        >
+          <View style={styles.profileModal}>
+            <View style={styles.profileInfo}>
+              {renderProfileImage()}
+              <Text style={styles.profileName}>{getFullName()}</Text>
+              <Text style={styles.profileEmail}>
+                {userData?.email || firestoreData?.email || ""}
+              </Text>
+            </View>
+            
+            <TouchableOpacity 
+              style={styles.profileOption}
+              onPress={handleViewProfile}
+            >
+              <MaterialIcons name="visibility" size={20} color="#035c70" />
+              <Text style={styles.profileOptionText}>Ver perfil</Text>
+            </TouchableOpacity>
+            
+            <View style={styles.divider} />
+            
+            <TouchableOpacity 
+              style={styles.profileOption}
+              onPress={handleLogOut}
+            >
+              <MaterialIcons name="logout" size={20} color="#E74C3C" />
+              <Text style={[styles.profileOptionText, styles.logoutText]}>Cerrar sesión</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </ImageBackground>
   );
 }
@@ -433,185 +621,283 @@ const styles = StyleSheet.create({
   backgroundImage: {
     flex: 1,
     width: '100%',
-    height: '100%',
   },
-  container: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.3)', 
-  },
-  header: {
+  headerOverlay: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: 'rgba(3, 92, 112, 0.9)',
     paddingHorizontal: 20,
-    paddingTop: 40,
-    paddingBottom: 15,
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
+    paddingTop: 50,
+    paddingBottom: 20,
   },
   menuButton: {
-    padding: 5,
-  },
-  headerTitle: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  storeName: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: 'white',
+    padding: 8,
   },
   profileButton: {
     padding: 8,
     backgroundColor: 'rgba(255,255,255,0.2)',
     borderRadius: 20,
   },
-  content: {
-    flex: 1,
-    padding: 15,
-    paddingTop: 10,
-  },
-  statsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 22,
-  },
-  statCard: {
+  mainContent: {
     flex: 1,
     backgroundColor: 'white',
-    padding: 15,
-    borderRadius: 15,
-    marginHorizontal: 5,
-    alignItems: 'center',
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    marginTop: 'auto',
+    minHeight: height * 0.8,
   },
-  statValue: {
-    fontSize: 20,
+  scrollContent: {
+    flex: 1,
+    padding: 25,
+    paddingTop: 30,
+  },
+
+  // Saludo del usuario
+  greetingContainer: {
+    marginBottom: 30,
+  },
+  greetingText: {
+    fontSize: 28,
     fontWeight: 'bold',
-    color: '#035c70',
+    color: '#2C3E50',
     marginBottom: 5,
   },
-  statTitle: {
-    fontSize: 12,
-    color: '#7F8C8D',
+  greetingSubtitle: {
+    fontSize: 16,
+    color: '#7D7D7D',
+  },
+
+  // Nuevas tarjetas minimalistas
+  menuButtonsContainer: {
+    marginBottom: 30,
+  },
+  cardsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 30,
+  },
+  card: {
+    width: (width - 70) / 4, // Divide el ancho disponible entre 4 tarjetas
+    backgroundColor: 'white',
+    borderRadius: 16,
+    padding: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    // Sombra suave para iOS
+    shadowColor: '#00797B',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 3.84,
+    // Sombra suave para Android
+    elevation: 4,
+    // Borde sutil
+    borderWidth: 1,
+    borderColor: 'rgba(0, 121, 123, 0.1)',
+    minHeight: 80, // Altura mínima para consistencia
+  },
+  cardContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%', // Asegura que ocupe todo el ancho de la tarjeta
+  },
+  cardIcon: {
+    marginBottom: 12,
+  },
+  cardText: {
+    fontSize: 12.5,
+    fontWeight: '600',
+    color: '#00797B',
+    textAlign: 'center',
+    fontFamily: 'System',
+    letterSpacing: 0.2,
+  },
+
+  // Nueva sección de estadísticas de productos con tarjetas
+  productStatsContainer: {
+    marginBottom: 25,
+  },
+  productStatsTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#2C3E50',
+    marginBottom: 15,
+    paddingLeft: 5,
+  },
+  productCardsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  productCard: {
+    width: (width - 70) / 2, // Mismo cálculo que las tarjetas principales
+    backgroundColor: 'white',
+    borderRadius: 16,
+    padding: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    // Sombra suave para iOS
+    shadowColor: '#00797B',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 3.84,
+    // Sombra suave para Android
+    elevation: 4,
+    // Borde sutil
+    borderWidth: 1,
+    borderColor: 'rgba(0, 121, 123, 0.1)',
+    minHeight: 100, // Altura ajustada sin ícono
+  },
+  productCardContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+  },
+  productCardValue: {
+    fontSize: 35,
+    fontWeight: 'bold',
+    color: '#087182',
+    marginBottom: 8,
     textAlign: 'center',
   },
-  sectionContainer: {
-    backgroundColor: 'rgba(255,255,255,0.9)',
+  productCardLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#575757', // Color específico para el texto
+    textAlign: 'center',
+    fontFamily: 'System',
+    letterSpacing: 0.2,
+  },
+
+  // Categorías con pie chart REAL
+  categoriesContainer: {
+    backgroundColor: '#f8f9fa',
     borderRadius: 15,
     padding: 20,
     marginBottom: 20,
-    elevation: 3,
+  },
+  categoriesTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#2C3E50',
+    marginBottom: 20,
+  },
+  categoriesContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  pieChartContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 100,
+    height: 100,
+    // Sombra sutil para el gráfico
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
+    elevation: 3,
   },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#035c70',
-    marginBottom: 15,
-    textAlign: 'center',
-  },
-  quickActions: {
-    marginBottom: 10,
-  },
-  quickActionsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 10,
-  },
-  quickAction: {
+  legendContainer: {
     flex: 1,
+    marginLeft: 20,
+  },
+  legendItem: {
+    flexDirection: 'row',
     alignItems: 'center',
-    padding: 15,
-    borderRadius: 12,
-    marginHorizontal: 5,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
+    marginBottom: 12,
+    paddingVertical: 4,
   },
-  quickActionText: {
-    color: 'white',
-    fontSize: 12,
+  colorDot: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    marginRight: 12,
+  },
+  legendTextContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    justifyContent: 'space-between',
+  },
+  legendPercentage: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#2C3E50',
+    minWidth: 50,
+  },
+  legendName: {
+    fontSize: 14,
+    color: '#2C3E50',
     fontWeight: '600',
-    marginTop: 5,
-    textAlign: 'center',
+    flex: 1,
+    marginLeft: 10,
   },
-  salesList: {
-    marginTop: 10,
+  
+  // Últimos productos
+  recentProductsContainer: {
+    backgroundColor: '#f8f9fa',
+    borderRadius: 15,
+    padding: 20,
+    marginBottom: 20,
   },
-  saleItem: {
+  recentProductsTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#2C3E50',
+    marginBottom: 15,
+  },
+  productsList: {
+    // Estilos para la lista de productos
+  },
+  productItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#ECF0F1',
+    borderBottomColor: '#E0E0E0',
   },
-  saleInfo: {
+  productInfo: {
     flex: 1,
   },
   productName: {
     fontSize: 16,
     fontWeight: '600',
     color: '#2C3E50',
+    marginBottom: 4,
   },
-  saleTime: {
-    fontSize: 12,
-    color: '#7F8C8D',
-    marginTop: 2,
-  },
-  saleAmount: {
-    fontSize: 16,
+  productPrice: {
+    fontSize: 14,
     fontWeight: 'bold',
-    color: '#2ED573',
+    color: '#27AE60',
   },
-  productsGrid: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  productThumbnail: {
+    width: 50,
+    height: 50,
+    borderRadius: 8,
   },
-  productCard: {
-    flex: 1,
+  thumbnailPlaceholder: {
+    width: 50,
+    height: 50,
+    borderRadius: 8,
+    backgroundColor: '#ECF0F1',
+    justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F8F9FA',
-    padding: 15,
-    borderRadius: 12,
-    marginHorizontal: 5,
-    elevation: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
   },
-  productRank: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#035c70',
-    marginBottom: 5,
-  },
-  productNameSmall: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#2C3E50',
+  noProductsText: {
     textAlign: 'center',
+    color: '#7D7D7D',
+    fontStyle: 'italic',
+    paddingVertical: 20,
   },
-  productSales: {
-    fontSize: 10,
-    color: '#7F8C8D',
-    marginTop: 2,
-  },
-  // Menú lateral
+
+  // Estilos para modales
   menuOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
@@ -653,23 +939,6 @@ const styles = StyleSheet.create({
     color: '#2C3E50',
     marginLeft: 15,
   },
-  logoutButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 15,
-    paddingHorizontal: 20,
-    marginTop: 'auto',
-    marginBottom: 30,
-    borderTopWidth: 1,
-    borderTopColor: '#ECF0F1',
-  },
-  logoutText: {
-    fontSize: 16,
-    color: '#E74C3C',
-    marginLeft: 15,
-    fontWeight: '600',
-  },
-  // Estilos del modal de perfil ACTUALIZADO CON FOTO
   profileOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
@@ -696,7 +965,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#ECF0F1',
   },
-  // NUEVO: Estilo para la imagen de perfil en el modal
   profileImage: {
     width: 60,
     height: 60,
@@ -714,7 +982,7 @@ const styles = StyleSheet.create({
   },
   avatarText: {
     color: 'white',
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
   },
   profileName: {
@@ -729,12 +997,6 @@ const styles = StyleSheet.create({
     color: '#7F8C8D',
     marginTop: 4,
     textAlign: 'center',
-  },
-  profileUpdated: {
-    fontSize: 10,
-    color: '#12B05B',
-    marginTop: 4,
-    fontWeight: '600',
   },
   profileOption: {
     flexDirection: 'row',

@@ -7,11 +7,10 @@ import {
   ScrollView,
   ImageBackground,
   BackHandler,
-  Image // NUEVO: Importar Image
+  Image
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-// Importar Firestore
-import { db } from '../src/config/firebaseConfig';
+import { db, auth } from '../src/config/firebaseConfig';
 import { doc, getDoc } from 'firebase/firestore';
 
 export default function ViewProfile({ navigation, route }) {
@@ -25,14 +24,12 @@ export default function ViewProfile({ navigation, route }) {
     birthDate: '',
     dni: '',
     gender: '',
-    profileImage: '' // NUEVO: agregar profileImage al estado
+    profileImage: ''
   });
 
   useEffect(() => {
-    // Cargar datos combinados de userData y firestoreData
     loadCombinedProfileData();
 
-    // Manejar botón de retroceso
     const backHandler = BackHandler.addEventListener(
       'hardwareBackPress',
       () => {
@@ -44,18 +41,21 @@ export default function ViewProfile({ navigation, route }) {
     return () => backHandler.remove();
   }, [userData, firestoreData]);
 
-  // Función para cargar datos desde Firestore
   const loadProfileDataFromFirestore = async () => {
     try {
-      const userRef = doc(db, 'users', 'prueba');
+      const user = auth.currentUser;
+      if (!user) return null;
+
+      // 🔥 LEER DEL USUARIO ACTUAL
+      const userRef = doc(db, 'users', user.uid);
       const userSnap = await getDoc(userRef);
       
       if (userSnap.exists()) {
         const firestoreUserData = userSnap.data();
-        console.log('📸 Datos de Firestore cargados:', firestoreUserData); // NUEVO: log
+        console.log('📸 Datos de Firestore cargados:', firestoreUserData);
         return firestoreUserData;
       } else {
-        console.log('❌ No se encontró documento en Firestore');
+        console.log('❌ No se encontró documento en Firestore para este usuario');
       }
     } catch (error) {
       console.error('Error cargando datos de Firestore:', error);
@@ -73,16 +73,14 @@ export default function ViewProfile({ navigation, route }) {
       birthDate: '',
       dni: '',
       gender: '',
-      profileImage: '' // NUEVO
+      profileImage: ''
     };
 
-    console.log('🔄 Cargando datos combinados...'); // NUEVO: log
+    console.log('🔄 Cargando datos combinados...');
 
-    // PRIMERO: Intentar cargar datos desde Firestore (más actualizados)
     const firestoreData = await loadProfileDataFromFirestore();
     
     if (firestoreData) {
-      // Mapear campos de Firestore (español) a nuestro estado (inglés)
       combinedData = {
         name: firestoreData.nombre || '',
         lastName: firestoreData.apellido || '',
@@ -92,14 +90,13 @@ export default function ViewProfile({ navigation, route }) {
         birthDate: firestoreData.fecha_de_nacimiento || '',
         dni: firestoreData.dni || '',
         gender: firestoreData.género || '',
-        profileImage: firestoreData.foto_perfil || '' // NUEVO: cargar foto de Cloudinary
+        profileImage: firestoreData.foto_perfil || ''
       };
       
-      console.log('✅ Datos mapeados desde Firestore:', combinedData); // NUEVO: log
+      console.log('✅ Datos mapeados desde Firestore:', combinedData);
     } 
-    // SEGUNDO: Si no hay datos en Firestore, usar los datos de autenticación
     else if (userData) {
-      console.log('📄 Usando datos de userData:', userData); // NUEVO: log
+      console.log('📄 Usando datos de userData:', userData);
       combinedData = {
         ...combinedData,
         name: userData.name || '',
@@ -108,9 +105,8 @@ export default function ViewProfile({ navigation, route }) {
       };
     }
 
-    // TERCERO: Si recibimos datos por parámetros, tienen prioridad
     if (route.params?.firestoreData) {
-      console.log('🎯 Usando datos de parámetros:', route.params.firestoreData); // NUEVO: log
+      console.log('🎯 Usando datos de parámetros:', route.params.firestoreData);
       const paramsData = route.params.firestoreData;
       combinedData = {
         name: paramsData.nombre || combinedData.name,
@@ -121,11 +117,11 @@ export default function ViewProfile({ navigation, route }) {
         birthDate: paramsData.fecha_de_nacimiento || combinedData.birthDate,
         dni: paramsData.dni || combinedData.dni,
         gender: paramsData.género || combinedData.gender,
-        profileImage: paramsData.foto_perfil || combinedData.profileImage // NUEVO
+        profileImage: paramsData.foto_perfil || combinedData.profileImage
       };
     }
 
-    console.log('🎯 Datos finales combinados:', combinedData); // NUEVO: log
+    console.log('🎯 Datos finales combinados:', combinedData);
     setProfileData(combinedData);
   };
 
@@ -133,17 +129,14 @@ export default function ViewProfile({ navigation, route }) {
     navigation.navigate('EditProfile', {
       profileData,
       onSave: (updatedData) => {
-        // Actualizar estado local
         setProfileData(updatedData);
-        // Recargar datos para asegurar que tenemos la versión más reciente
         loadCombinedProfileData();
       }
     });
   };
 
-  // NUEVO: Función para mostrar foto o iniciales
   const renderProfileImage = () => {
-    console.log('🖼️ Renderizando imagen:', profileData.profileImage); // NUEVO: log
+    console.log('🖼️ Renderizando imagen:', profileData.profileImage);
     
     if (profileData.profileImage) {
       return (
@@ -169,7 +162,6 @@ export default function ViewProfile({ navigation, route }) {
     }
   };
 
-  // Función para obtener iniciales del avatar
   const getAvatarInitials = () => {
     if (profileData.name && profileData.lastName) {
       return `${profileData.name.charAt(0)}${profileData.lastName.charAt(0)}`;
@@ -196,7 +188,6 @@ export default function ViewProfile({ navigation, route }) {
       resizeMode="cover"
     >
       <View style={styles.container}>
-        {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity 
             style={styles.backButton}
@@ -209,7 +200,6 @@ export default function ViewProfile({ navigation, route }) {
         </View>
 
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-          {/* Avatar y Nombre - ACTUALIZADO */}
           <View style={styles.profileHeader}>
             {renderProfileImage()}
             <Text style={styles.userName}>
@@ -224,7 +214,6 @@ export default function ViewProfile({ navigation, route }) {
             )}
           </View>
 
-          {/* Información Personal */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Información Personal</Text>
             
@@ -238,7 +227,6 @@ export default function ViewProfile({ navigation, route }) {
             <InfoField label="Género" value={profileData.gender} />
           </View>
 
-          {/* Botón Editar Perfil */}
           <TouchableOpacity 
             style={styles.editButton}
             onPress={handleEditProfile}
@@ -247,7 +235,6 @@ export default function ViewProfile({ navigation, route }) {
             <Text style={styles.editButtonText}>Editar Perfil</Text>
           </TouchableOpacity>
 
-          {/* Espacio al final */}
           <View style={styles.spacer} />
         </ScrollView>
       </View>
@@ -263,7 +250,7 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.3)',
+    backgroundColor: 'rgba(0,0,0,0)',
   },
   header: {
     flexDirection: 'row',
@@ -301,7 +288,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
   },
-  // NUEVO: Estilo para la imagen de perfil
   profileImage: {
     width: 100,
     height: 100,
